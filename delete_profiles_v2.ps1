@@ -1,5 +1,5 @@
 # PowerShell-Skript zum Löschen von lokalen und Domänenadministratorenprofilen, die älter als 60 Tage sind
-# script design: I.Pielczyk für task INFRA-1866
+# script design: I.Pielczyk
 
 # Festlegen des Alters in Tagen
 $maxAgeInDays = 60
