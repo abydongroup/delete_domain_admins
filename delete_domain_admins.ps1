@@ -1,22 +1,37 @@
-$removeThese = Get-CimInstance -Class Win32_UserProfile -verbose | Where-Object {(!$_.Special) -and ($_.LastUseTime -lt (Get-Date).AddDays(-1)) -and ($_.SID -notmatch '*500')}
-foreach ($remove in $removeThese) {
-Remove-CimInstance $remove -Confirm:$FALSE -ErrorAction continue -ErrorVariable RemoveError
+# PowerShell-Skript zum Löschen von lokalen und Domänenadministratorenprofilen, die älter als 60 Tage sind
+# script design: I.Pielczyk
+
+# Festlegen des Alters in Tagen
+$maxAgeInDays = 60
+
+# Funktion zum Löschen eines Benutzerprofils
+function Remove-UserProfile($profilePath) {
+    try {
+        Remove-Item -Path $profilePath -Recurse -Force
+        Write-Host "Profil gelöscht: $profilePath"
+    } catch {
+        Write-Host "Fehler beim Löschen des Profils: $_"
+    }
 }
 
-get-localuser | where {$_.name -notmatch 'Administrator' -and $_.name -notlike 'LocalAdmin' -and $_.name -notmatch 'DefaultAccount' -and $_.name -notmatch 'Guest' -and $_.name -notmatch 'WDAGUtilityAccount'} | remove-localuser
+# Lokale Administratoren abrufen
+$localAdmins = net localgroup Administratoren | Select-Object -Skip 4
 
-$profiledirectory="C:\Users\"
-Get-ChildItem -Path $profiledirectory -verbose | Where-Object {$_.LastAccessTime -lt (Get-Date).AddDays(-1) -and ($_.FullName -notmatch 'Administrator|Public|LocalAdmin') }
-    ForEach-Object{
-        Get-ChildItem 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\ProfileList' -verbose |
-            ForEach-Object{
-            $profilepath=$_.GetValue('ProfileImagePath')    
-            if($profilepath -notmatch 'administrator|NetworkService|Localservice|systemprofile|LocalAdmin'){
-                Write-Host "Removing item: $profilepath" -ForegroundColor green -verbose
-                Remove-Item $_.PSPath -verbose
-                Remove-Item $profilepath -Recurse -Force -verbose
-            }else{
-                Write-Host "Skipping item:$profilepath" -Fore blue -Back white -verbose
-            }
+# Domänenadministratoren abrufen
+$domainAdmins = Get-WmiObject Win32_GroupUser | Where-Object { $_.GroupComponent -match "Domain Admins" } | ForEach-Object {
+    $adminName = $_.PartComponent -replace '^.*Name="([^"]+)".*$', '$1'
+    $adminName
+}
+
+# Profile älter als 60 Tage löschen
+foreach ($profilePath in (Get-ChildItem -Path "C:\Users" | Where-Object { $_.PSIsContainer -and (Test-Path (Join-Path $_.FullName 'NTUSER.DAT')) })) {
+    $lastWriteTime = $profilePath.LastWriteTime
+    $ageInDays = (Get-Date) - $lastWriteTime
+    if ($ageInDays.Days -gt $maxAgeInDays) {
+        if (($localAdmins -contains $profilePath.Name) -or ($domainAdmins -contains $profilePath.Name)) {
+            Remove-UserProfile -profilePath $profilePath.FullName
         }
     }
+}
+
+# end script
