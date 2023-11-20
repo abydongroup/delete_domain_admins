@@ -1,16 +1,19 @@
 # PowerShell-Skript zum Löschen von lokalen und Domänenadministratorenprofilen, die älter als 60 Tage sind
-# script design: I.Pielczyk
+# script design: I.Pielczyk für task INFRA-1866
 
 # Festlegen des Alters in Tagen
 $maxAgeInDays = 60
 
-# Funktion zum Löschen eines Benutzerprofils
+# Logdatei festlegen
+$logFile = "C:\Temp\RemoveProfiles_Log.txt"
+
+# Funktion zum Löschen eines Benutzerprofils und zum Loggen des Vorgangs
 function Remove-UserProfile($profilePath) {
     try {
         Remove-Item -Path $profilePath -Recurse -Force
-        Write-Host "Profil gelöscht: $profilePath"
+        Add-Content -Path $logFile -Value "Profil gelöscht: $($profilePath.FullName)"
     } catch {
-        Write-Host "Fehler beim Löschen des Profils: $_"
+        Add-Content -Path $logFile -Value "Fehler beim Löschen des Profils $($profilePath.FullName): $_"
     }
 }
 
@@ -29,7 +32,7 @@ foreach ($profilePath in (Get-ChildItem -Path "C:\Users" | Where-Object { $_.PSI
     $ageInDays = (Get-Date) - $lastWriteTime
     if ($ageInDays.Days -gt $maxAgeInDays) {
         if (($localAdmins -contains $profilePath.Name) -or ($domainAdmins -contains $profilePath.Name)) {
-            Remove-UserProfile -profilePath $profilePath.FullName
+            Remove-UserProfile -profilePath $profilePath
         }
     }
 }
