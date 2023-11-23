@@ -16,14 +16,18 @@ $excludeUser = "HauptBenutzer"
 # Gruppe, deren Mitgliederprofile nicht gelöscht werden sollen
 $excludeGroup = "Domain Admins"
 
-# Logdatei erstellen
+# Logdatei erstellen oder vorhandene Logdatei laden
 $logPath = Join-Path -Path $PSScriptRoot -ChildPath "ProfileCleanupLog.txt"
-$maxLogSize = 10MB
 
-# Wenn die Logdatei die maximale Größe erreicht hat, älteste Einträge löschen
-if (Test-Path $logPath -and (Get-Item $logPath).length -ge $maxLogSize) {
-    $logContent = Get-Content $logPath
-    $logContent | Select-Object -Skip 100 | Set-Content $logPath
+# Logdatei vorbereiten: Wenn die Logdatei größer als 10 MB ist, älteste Einträge löschen
+if (Test-Path $logPath) {
+    $logSize = (Get-Item $logPath).length
+    if ($logSize -ge 10MB) {
+        $logContent = Get-Content $logPath
+        $logContent | Select-Object -Last 100 | Set-Content $logPath
+    }
+} else {
+    New-Item -ItemType File -Path $logPath | Out-Null
 }
 
 function Log-Message {
@@ -50,6 +54,7 @@ foreach ($profile in $oldProfiles) {
         if ($username -in (Get-LocalGroupMember -Group $excludeGroup).Name) {
             $deletedDomainAdmins += $username
         }
+        Log-Message "Gelöschtes Benutzerprofil: $username"
     }
 }
 
