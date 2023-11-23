@@ -1,23 +1,17 @@
-# Check, ob das Skript mit Administratorrechten ausgeführt wird
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "Dieses Skript erfordert Administratorrechte. Führen Sie PowerShell als Administrator aus und starten Sie das Skript erneut."
-    exit
-}
-
-# Benutzerprofile-Verzeichnis festlegen
+# Benutzerprofil-Verzeichnis festlegen
 $profilePath = "C:\Users"
 
 # Maximalalter für Benutzerprofile in Tagen
 $maxAgeInDays = 60
 
-# Hauptbenutzer, der ausgeschlossen werden soll
-$excludeUser = "HauptBenutzer"
+# Benutzerkonten, die ausgeschlossen werden sollen
+$excludeUsers = @("HauptBenutzer", "Administrator")
 
-# Gruppe, deren Mitgliederprofile nicht gelöscht werden sollen
-$excludeGroup = "Domain Admins"
+# Gruppen, deren Mitgliederprofile nicht gelöscht werden sollen
+$excludeGroups = @("Domain Admins")
 
 # Logdatei erstellen oder vorhandene Logdatei laden
-$logPath = Join-Path -Path $PSScriptRoot -ChildPath "ProfileCleanupLog.txt"
+$logPath = Join-Path -Path $env:TEMP -ChildPath "ProfileCleanupLog.txt"
 
 # Logdatei vorbereiten: Wenn die Logdatei größer als 10 MB ist, älteste Einträge löschen
 if (Test-Path $logPath) {
@@ -47,15 +41,17 @@ $oldProfiles = Get-ChildItem $profilePath | Where-Object {
 
 foreach ($profile in $oldProfiles) {
     $username = $profile.Name
-    if ($username -ne $excludeUser -and -not (Get-LocalGroupMember -Group $excludeGroup -Member $username -ErrorAction SilentlyContinue)) {
-        Write-Host "Lösche Benutzerprofil: $username"
-        Remove-Item -Path $profile.FullName -Recurse -Force
-        $deletedProfiles += $username
-        if ($username -in (Get-LocalGroupMember -Group $excludeGroup).Name) {
-            $deletedDomainAdmins += $username
-        }
-        Log-Message "Gelöschtes Benutzerprofil: $username"
+    if ($username -in $excludeUsers -or (Get-LocalGroupMember -Group $excludeGroups -Member $username -ErrorAction SilentlyContinue)) {
+        Continue  # Benutzer ausschließen
     }
+
+    Write-Host "Lösche Benutzerprofil: $username"
+    Remove-Item -Path $profile.FullName -Recurse -Force
+    $deletedProfiles += $username
+    if ($username -in (Get-LocalGroupMember -Group $excludeGroups).Name) {
+        $deletedDomainAdmins += $username
+    }
+    Log-Message "Gelöschtes Benutzerprofil: $username"
 }
 
 # Log-Einträge erstellen
